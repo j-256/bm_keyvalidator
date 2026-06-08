@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<extensions xmlns="http://www.demandware.com/xml/bmmodules/2007-12-11" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.demandware.com/xml/bmmodules/2007-12-11 bmext.xsd">
+
+<!--
+    Slides Key Validator into the existing Administration > Operations menu,
+    right after the built-in "Private Keys and Certificates" action
+    (id: operations_certificates, position: 200).
+-->
+<!--
+    Note: BM's Roles & Permissions screen (Business Manager Modules tab)
+    shows only a "Write" checkbox for this action, not a "Read" checkbox.
+    That's a platform-level policy: the `readonlyEnabled` attribute on
+    `<menuaction>` exists in the schema but is silently rejected for
+    merchant cartridges (verified empirically and confirmed against the
+    platform source) – only first-party Salesforce modules can opt into
+    the Read column. So we accept the Write requirement and document it
+    in the README; no XML-side knob can fix it.
+-->
+<menuaction id="operations_keyvalidator" menupath="operations" position="201" site="false">
+  <name xml:lang="x-default">Key Validator</name>
+  <short_description xml:lang="x-default">Verify private key and public key pairs.</short_description>
+  <description xml:lang="x-default">Verify that a Business Manager private key matches an encoded public key.</description>
+  <exec pipeline="KeyValidator" node="Show"/>
+  <sub-pipelines>
+    <pipeline name="KeyValidator"/>
+  </sub-pipelines>
+  <parameters>
+    <parameter name="menuname" value="Key Validator"/>
+    <parameter name="mainmenuname" value="Operations"/>
+  </parameters>
+  <icon>icons/keyvalidator_ico.gif</icon>
+</menuaction>
+
+</extensions>

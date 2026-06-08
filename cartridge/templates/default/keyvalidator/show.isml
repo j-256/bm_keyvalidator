@@ -1,0 +1,682 @@
+<isdecorate template="keyvalidator/layout">
+
+<p class="kv-lede">${Resource.msg('keyvalidator.page.subtitle','keyvalidator',null)}</p>
+
+<section id="kv-result-mount" class="kv-card kv-result" role="status" aria-live="polite" hidden></section>
+
+<section class="kv-card">
+    <header class="kv-card-header">
+        <h2>${Resource.msg('keyvalidator.form.heading','keyvalidator',null)}</h2>
+        <p class="kv-card-help">${Resource.msg('keyvalidator.form.help.before','keyvalidator',null)} <a href="${pdict.privateKeysUrl}" target="_blank" rel="noopener">${Resource.msg('keyvalidator.form.help.linkText','keyvalidator',null)}</a>${Resource.msg('keyvalidator.form.help.after','keyvalidator',null)}</p>
+    </header>
+
+    <form action="${pdict.actionUrl}" method="post" class="kv-form" autocomplete="off">
+        <input type="hidden" name="${pdict.csrfTokenName}" value="${pdict.csrfTokenValue}"/>
+        <input type="hidden" name="CurrentMenuItemId" value="${pdict.CurrentMenuItemId}"/>
+        <input type="hidden" name="mainmenuname" value="${pdict.mainmenuname}"/>
+        <input type="hidden" name="menuname" value="${pdict.menuname}"/>
+
+        <div class="kv-field">
+            <label for="kv-privKeyID">${Resource.msg('keyvalidator.form.privkeyid.label','keyvalidator',null)}</label>
+            <input type="text" id="kv-privKeyID" name="privKeyID" required
+                   list="kv-aliases" autocomplete="off"
+                   value="${pdict.form.privKeyID}"
+                   placeholder="${Resource.msg('keyvalidator.form.privkeyid.placeholder','keyvalidator',null)}"/>
+            <datalist id="kv-aliases" data-aliases-url="${pdict.aliasesUrl}"></datalist>
+            <div id="kv-aliases-loading" class="kv-loading" hidden>
+                <span class="kv-spinner" aria-hidden="true"></span>
+                <span>${Resource.msg('keyvalidator.aliases.loading','keyvalidator',null)}</span>
+            </div>
+            <div id="kv-aliases-notice" class="kv-notice" hidden></div>
+            <small class="kv-hint">${Resource.msg('keyvalidator.form.privkeyid.hint','keyvalidator',null)}</small>
+        </div>
+
+        <div class="kv-field">
+            <label for="kv-publicKey">${Resource.msg('keyvalidator.form.pubkey.label','keyvalidator',null)}</label>
+            <textarea id="kv-publicKey" name="publicKey" required rows="6" class="kv-mono"
+                      placeholder="${Resource.msg('keyvalidator.form.pubkey.placeholder','keyvalidator',null)}">${pdict.form.publicKey}</textarea>
+            <div class="kv-field-actions">
+                <button type="button" id="kv-pubkey-strip" class="kv-btn kv-btn-secondary kv-btn-small"
+                        title="${Resource.msg('keyvalidator.form.pubkey.strip.title','keyvalidator',null)}"
+                        disabled>${Resource.msg('keyvalidator.form.pubkey.strip','keyvalidator',null)}</button>
+                <button type="button" id="kv-pubkey-copy" class="kv-btn kv-btn-secondary kv-btn-small"
+                        title="${Resource.msg('keyvalidator.form.pubkey.copy.title','keyvalidator',null)}"
+                        disabled>${Resource.msg('keyvalidator.form.pubkey.copy','keyvalidator',null)}</button>
+                <span id="kv-pubkey-copy-confirm" class="kv-copy-confirm"
+                      role="status" aria-live="polite" hidden>${Resource.msg('keyvalidator.form.pubkey.copy.confirmed','keyvalidator',null)}</span>
+            </div>
+            <div id="kv-pubkey-notice" class="kv-notice" hidden></div>
+            <div id="kv-pubkey-fitness" class="kv-notice" role="status" aria-live="polite" hidden></div>
+            <small class="kv-hint">${Resource.msg('keyvalidator.form.pubkey.hint','keyvalidator',null)}</small>
+        </div>
+
+        <div class="kv-field">
+            <label for="kv-algorithm">${Resource.msg('keyvalidator.form.algorithm.label','keyvalidator',null)}</label>
+            <select id="kv-algorithm" name="algorithm">
+                <isloop items="${pdict.algorithmOptions}" var="opt">
+                    <isif condition="${opt.selected}">
+                        <option value="${opt.value}" selected>${opt.label}</option>
+                    <iselse/>
+                        <option value="${opt.value}">${opt.label}</option>
+                    </isif>
+                </isloop>
+            </select>
+            <small class="kv-hint">${Resource.msgf('keyvalidator.form.algorithm.hint','keyvalidator',null,pdict.defaults.algorithm)}</small>
+        </div>
+
+        <div class="kv-actions">
+            <button type="submit" class="kv-btn kv-btn-primary">${Resource.msg('keyvalidator.form.submit','keyvalidator',null)}</button>
+            <button type="button" id="kv-reset" class="kv-btn kv-btn-secondary">${Resource.msg('keyvalidator.form.reset','keyvalidator',null)}</button>
+        </div>
+    </form>
+
+    <footer class="kv-card-footer">
+        <small>${Resource.msg('keyvalidator.page.footer','keyvalidator',null)}</small>
+    </footer>
+</section>
+
+<script>
+(function () {
+    // Reactive autocomplete: fetch the list of imported private-key aliases
+    // from KeyValidator-Aliases on page load and feed them into the datalist
+    // adjacent to the privKeyID input. On any failure, the input remains a
+    // free-text field; a non-blocking notice surfaces what went wrong.
+
+    var datalist = document.getElementById('kv-aliases');
+    var notice = document.getElementById('kv-aliases-notice');
+    var loading = document.getElementById('kv-aliases-loading');
+    var aliasInput = document.getElementById('kv-privKeyID');
+    var algorithmSelect = document.getElementById('kv-algorithm');
+    if (!datalist || !notice) return;
+
+    // Map of alias -> { family, keySize }, derived from the
+    // certificate_search response. Drives the auto-pick handler below
+    // and the public-key fitness check (algorithm/length mismatch
+    // pre-flight).
+    var aliasMetadata = Object.create(null);
+
+    // Once the user manually changes the algorithm select, stop auto-
+    // picking on alias change -- we trust their explicit choice over our
+    // inference. Set unconditionally on any change event the user fires.
+    var userTouchedAlgorithm = false;
+    if (algorithmSelect) {
+        algorithmSelect.addEventListener('change', function () {
+            userTouchedAlgorithm = true;
+        });
+    }
+
+    // After a form reset, re-engage auto-pick (the user's previous
+    // explicit choice was just thrown out alongside everything else)
+    // AND re-fetch the alias list -- a key may have been imported in
+    // another tab since the page loaded, or a transient lookup failure
+    // may have resolved. Reset is the natural "I'm starting over" gate
+    // to refresh the dropdown without a full page reload.
+    document.addEventListener('kv:reset', function () {
+        userTouchedAlgorithm = false;
+        // Wipe alias state from the previous fetch.
+        aliasMetadata = Object.create(null);
+        if (datalist) datalist.innerHTML = '';
+        // Re-enable controls that the zero-keys branch may have disabled.
+        if (aliasInput) aliasInput.disabled = false;
+        var submitBtn = document.querySelector('form.kv-form button[type=submit]');
+        if (submitBtn) submitBtn.disabled = false;
+        var fitness = document.getElementById('kv-pubkey-fitness');
+        if (fitness) { fitness.hidden = true; fitness.textContent = ''; }
+        loadAliases();
+    });
+
+    // Pick a sensible default algorithm for a given key-family string.
+    // X.509 / SFCC certificate_search emits "RSA" or "EC"; we accept
+    // "ECDSA" too as a defensive variant for forward-compat. SHA-256 is
+    // the modern default across both families.
+    function defaultAlgorithmForFamily(family) {
+        if (!family) return null;
+        var f = String(family).toUpperCase();
+        if (f === 'RSA') return 'SHA256withRSA';
+        if (f === 'EC' || f === 'ECDSA') return 'SHA256withECDSA';
+        return null;
+    }
+
+    if (aliasInput && algorithmSelect) {
+        // 'change' fires on datalist pick, blur-after-edit, etc. -- the
+        // user-committed events. 'input' would fire on every keystroke
+        // and clobber the field too aggressively.
+        aliasInput.addEventListener('change', function () {
+            if (userTouchedAlgorithm) return;
+            var meta = aliasMetadata[aliasInput.value];
+            var alg = defaultAlgorithmForFamily(meta && meta.family);
+            if (alg && algorithmSelect.value !== alg) {
+                // Verify the option exists before assigning so a future
+                // narrowing of SUPPORTED_ALGORITHMS can't put the select
+                // into an invalid state.
+                for (var i = 0; i < algorithmSelect.options.length; i++) {
+                    if (algorithmSelect.options[i].value === alg) {
+                        algorithmSelect.value = alg;
+                        break;
+                    }
+                }
+            }
+        });
+    }
+
+    var url = datalist.getAttribute('data-aliases-url');
+    if (!url) return;
+
+    var MESSAGES = <isprint value="${pdict.noticeMessagesJson}" encoding="off"/>;
+    var LINKS = <isprint value="${pdict.linksJson}" encoding="off"/>;
+
+    // Defer showing the spinner so a fast fetch (typical: <500ms) doesn't
+    // flash one. If the fetch is still in flight after this delay, reveal.
+    var SPINNER_DELAY_MS = 400;
+
+    function showNotice(level, message) {
+        notice.className = 'kv-notice kv-notice-' + level;
+        notice.textContent = message;
+        notice.hidden = false;
+    }
+
+    // Variant that accepts a list of nodes/strings for cases that need
+    // an inline hyperlink. Strings get auto-wrapped as text nodes; the
+    // caller passes already-built <a> elements as-is.
+    function showNoticeRich(level, parts) {
+        notice.className = 'kv-notice kv-notice-' + level;
+        notice.textContent = '';
+        for (var i = 0; i < parts.length; i++) {
+            var p = parts[i];
+            notice.appendChild(typeof p === 'string' ? document.createTextNode(p) : p);
+        }
+        notice.hidden = false;
+    }
+
+    function buildPrivateKeysLink(text) {
+        var a = document.createElement('a');
+        a.href = LINKS.privateKeys;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.textContent = text;
+        return a;
+    }
+
+    function populate(aliases) {
+        var frag = document.createDocumentFragment();
+        for (var i = 0; i < aliases.length; i++) {
+            var opt = document.createElement('option');
+            opt.value = aliases[i].alias;
+            // The label appears as a hint after the alias on browsers that
+            // render datalist entries with a label (Chrome/Edge do, Safari
+            // doesn't -- harmless either way).
+            if (aliases[i].algorithm) {
+                var label = aliases[i].algorithm;
+                if (aliases[i].keySize) label += ' / ' + aliases[i].keySize;
+                opt.label = label;
+                // Stash family + keySize so the alias-change handler can
+                // pre-pick the algorithm AND the fitness check can warn
+                // on length/family mismatches.
+                aliasMetadata[aliases[i].alias] = {
+                    family: aliases[i].algorithm,
+                    keySize: aliases[i].keySize || null
+                };
+            }
+            frag.appendChild(opt);
+        }
+        datalist.appendChild(frag);
+    }
+
+    function loadAliases() {
+        // Each invocation gets its own spinner-timer + abort-timer so a
+        // re-fetch fired by Reset doesn't share state with the original
+        // page-load fetch.
+        notice.hidden = true;
+        var spinTimer = loading
+            ? setTimeout(function () { loading.hidden = false; }, SPINNER_DELAY_MS)
+            : null;
+        function localHideSpinner() {
+            if (spinTimer) { clearTimeout(spinTimer); spinTimer = null; }
+            if (loading) loading.hidden = true;
+        }
+
+        // Client-side budget for the whole alias fetch. Comfortably exceeds
+        // 2 * TIMEOUT_MS in certificateFetcher.js (which serialises a token
+        // exchange and a certificate_search) so a single slow call doesn't
+        // get pre-empted by the abort.
+        var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+        var abortTimer = setTimeout(function () {
+            if (ctrl) ctrl.abort();
+        }, 20000);
+
+        fetch(url, {
+            credentials: 'same-origin',
+            headers: { Accept: 'application/json' },
+            signal: ctrl ? ctrl.signal : undefined
+        })
+            .then(function (r) {
+                if (!r.ok) throw new Error('http ' + r.status);
+                return r.json();
+            })
+            .then(function (data) {
+                if (!data || data.ok !== true) {
+                    var key = (data && data.error) || 'unknown';
+                    showNotice('warn', MESSAGES[key] || MESSAGES.unknown);
+                    return;
+                }
+                var aliases = data.aliases || [];
+                if (aliases.length === 0) {
+                    showNoticeRich('info', [
+                        MESSAGES.emptyBefore + ' ',
+                        buildPrivateKeysLink(MESSAGES.emptyLinkText),
+                        MESSAGES.emptyAfter
+                    ]);
+                    // Definitive zero-keys case: there's nothing the user can
+                    // do here until they import a key, so disable the alias
+                    // input + the form submit button. (We don't touch this on
+                    // a fetch *failure* -- there the input must remain usable
+                    // since the user may know an alias the lookup didn't
+                    // surface.)
+                    if (aliasInput) {
+                        aliasInput.disabled = true;
+                    }
+                    var submitBtn = document.querySelector('form.kv-form button[type=submit]');
+                    if (submitBtn) submitBtn.disabled = true;
+                    return;
+                }
+                populate(aliases);
+                // Persistent success notice: a bare <input list> looks identical
+                // to a free-text field, so without this the user has no signal
+                // that an autocomplete dropdown exists. Pluralise via two
+                // resource strings rather than a single Intl.PluralRules call so
+                // the .properties file remains the source of truth for copy.
+                var msg = aliases.length === 1
+                    ? MESSAGES.populatedSingular
+                    : MESSAGES.populatedPlural.replace('{0}', String(aliases.length));
+                showNotice('success', msg);
+            })
+            .catch(function (err) {
+                // Network error, timeout, or non-JSON response.
+                var key = (err && err.name === 'AbortError') ? 'timeout' : 'unavailable';
+                showNotice('warn', MESSAGES[key]);
+            })
+            .then(function () {
+                clearTimeout(abortTimer);
+                localHideSpinner();
+            });
+    }
+
+    loadAliases();
+
+    // ---- Public-key fitness check (algorithm/length pre-flight) ----
+    //
+    // When the user picked an alias from the dropdown we know its family
+    // and key size, which means we know roughly how many Base64 characters
+    // the matching public key should encode to. Comparing that against
+    // the current textarea contents catches two common DKIM-flow mistakes
+    // before the server round-trip: pasting the wrong key (length way
+    // off) or pasting a different family entirely (RSA vs EC).
+    //
+    // Server-built lookup table; the canonical copy lives in
+    // cartridge/scripts/keyValidatorHelpers.js and is unit-tested
+    // there. See that module for empirical-measurement methodology.
+    var EXPECTED_PUBKEY_LEN = <isprint value="${pdict.expectedPubKeyLengthsJson}" encoding="off"/>;
+    function expectedPubKeyLengthChars(family, keySize) {
+        if (!family) return null;
+        var f = String(family).toUpperCase();
+        var k = parseInt(keySize, 10);
+        if (!k) return null;
+        if (f === 'RSA') return EXPECTED_PUBKEY_LEN.RSA[k] || null;
+        if (f === 'EC' || f === 'ECDSA') return EXPECTED_PUBKEY_LEN.EC[k] || null;
+        return null;
+    }
+
+    var pubInputForFit = document.getElementById('kv-publicKey');
+    var fitnessNotice = document.getElementById('kv-pubkey-fitness');
+
+    function strippedPubKeyLength(value) {
+        // Match the validator's normalisation: strip PEM armor + all
+        // whitespace, then count what's left. Mirrors
+        // stripPemArmorAndAllWhitespace in cartridge/scripts/keyValidator.js.
+        return String(value || '')
+            .replace(/-----BEGIN [^-]+-----/g, '')
+            .replace(/-----END [^-]+-----/g, '')
+            .replace(/\s+/g, '')
+            .length;
+    }
+
+    // Empirical openssl SPKI lengths show zero variance per (family,
+    // size), so any non-zero diff is worth surfacing -- the safety net
+    // is that this is a warn, not a submit-block. >FITNESS_FAR_RATIO
+    // off the expected length is "way off" and almost certainly a
+    // different family or a partial paste.
+    var FITNESS_FAR_RATIO = 0.20;
+
+    function evaluateFitness() {
+        if (!fitnessNotice || !pubInputForFit || !aliasInput) return;
+        var meta = aliasMetadata[aliasInput.value];
+        var expected = meta && expectedPubKeyLengthChars(meta.family, meta.keySize);
+        var actual = strippedPubKeyLength(pubInputForFit.value);
+        // Hide the notice if we don't have enough info to compare or
+        // there's nothing in the textarea to evaluate.
+        if (!expected || actual === 0) {
+            fitnessNotice.hidden = true;
+            return;
+        }
+        var diff = Math.abs(actual - expected);
+        if (diff === 0) {
+            fitnessNotice.hidden = true;
+            return;
+        }
+        var label = meta.family + (meta.keySize ? ' / ' + meta.keySize : '');
+        var msg;
+        if (diff / expected >= FITNESS_FAR_RATIO) {
+            // Way off -- almost certainly a wrong-family or wrong-alias paste.
+            msg = MESSAGES.fitnessFamilyMismatch.replace('{0}', label);
+        } else {
+            msg = MESSAGES.fitnessLengthMismatch
+                .replace('{0}', String(expected))
+                .replace('{1}', label)
+                .replace('{2}', String(actual));
+        }
+        fitnessNotice.className = 'kv-notice kv-notice-warn';
+        fitnessNotice.textContent = msg;
+        fitnessNotice.hidden = false;
+    }
+
+    if (aliasInput) aliasInput.addEventListener('change', evaluateFitness);
+    if (pubInputForFit) pubInputForFit.addEventListener('input', evaluateFitness);
+})();
+
+(function () {
+    // Diagnostic logging: dump every value the user picks into the form so
+    // an operator can copy/paste it for cross-referencing with external
+    // tools (openssl etc). Public keys and aliases are non-secret, so this
+    // is safe to leave on. Mirrors the server-side LOG.info on Verify.
+
+    var aliasInput = document.getElementById('kv-privKeyID');
+    var pubKeyInput = document.getElementById('kv-publicKey');
+    var algorithmSelect = document.getElementById('kv-algorithm');
+
+    function snapshot(reason) {
+        if (!aliasInput || !pubKeyInput || !algorithmSelect) return;
+        console.log('[KeyValidator] ' + reason, {
+            alias: aliasInput.value,
+            algorithm: algorithmSelect.value,
+            publicKey: pubKeyInput.value
+        });
+    }
+
+    if (aliasInput) {
+        // 'change' fires when a datalist option is picked or the field is
+        // committed (blur after edit). 'input' would be too chatty.
+        aliasInput.addEventListener('change', function () { snapshot('alias selected'); });
+    }
+    if (pubKeyInput) {
+        pubKeyInput.addEventListener('change', function () { snapshot('public key set'); });
+    }
+})();
+
+(function () {
+    // Public-key utility buttons: "Strip to single line" turns a PEM
+    // block into the bare Base64 form a DKIM DNS TXT record needs;
+    // "Copy" hands the current textarea value to the clipboard. Both
+    // are disabled while the textarea is empty so they don't look
+    // available before there's anything to act on.
+
+    var pubInput = document.getElementById('kv-publicKey');
+    var stripBtn = document.getElementById('kv-pubkey-strip');
+    var copyBtn  = document.getElementById('kv-pubkey-copy');
+    var copyConfirm = document.getElementById('kv-pubkey-copy-confirm');
+    var notice   = document.getElementById('kv-pubkey-notice');
+    if (!pubInput || !stripBtn || !copyBtn || !notice) return;
+
+    var MESSAGES = <isprint value="${pdict.noticeMessagesJson}" encoding="off"/>;
+    var COPY_CONFIRM_HIDE_MS = 1500;
+    var copyHideTimer = null;
+
+    function syncDisabled() {
+        var empty = pubInput.value.length === 0;
+        stripBtn.disabled = empty;
+        copyBtn.disabled  = empty;
+    }
+    syncDisabled();
+    pubInput.addEventListener('input', function () {
+        syncDisabled();
+        // User is editing -- clear any stale strip advisory.
+        notice.hidden = true;
+    });
+
+    // Form reset: textarea is now empty, advisory is stale, and the
+    // "Copied to clipboard" confirmation might still be on screen.
+    document.addEventListener('kv:reset', function () {
+        notice.hidden = true;
+        if (copyHideTimer) {
+            clearTimeout(copyHideTimer);
+            copyHideTimer = null;
+        }
+        if (copyConfirm) copyConfirm.hidden = true;
+        syncDisabled();
+    });
+
+    function showNotice(level, message) {
+        notice.className = 'kv-notice kv-notice-' + level;
+        notice.textContent = message;
+        notice.hidden = false;
+    }
+
+    stripBtn.addEventListener('click', function () {
+        var raw = pubInput.value;
+        // Detect what kinds of whitespace are present BEFORE stripping
+        // so we can warn specifically about spaces/tabs (the case that
+        // tends to slip through copy/paste). Newlines are expected and
+        // boring; if that's all we removed, the notice is informational.
+        var deArmored = raw
+            .replace(/-----BEGIN [^-]+-----/g, '')
+            .replace(/-----END [^-]+-----/g, '');
+        var hadSpaceOrTab = /[ \t]/.test(deArmored);
+        var stripped = deArmored.replace(/\s+/g, '');
+        if (stripped === raw) return;   // nothing to do
+        pubInput.value = stripped;
+        syncDisabled();
+        showNotice(hadSpaceOrTab ? 'warn' : 'info',
+            hadSpaceOrTab ? MESSAGES.strippedSpaces : MESSAGES.strippedClean);
+    });
+
+    function fallbackCopy(text) {
+        // execCommand('copy') needs a focused, selected node. Old enough
+        // browsers (and locked-down BM contexts) can refuse the modern
+        // API; fall through to this path.
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        var ok = false;
+        try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+        document.body.removeChild(ta);
+        return ok;
+    }
+
+    copyBtn.addEventListener('click', function () {
+        var text = pubInput.value;
+        if (!text) return;
+        var done = function (ok) {
+            if (!ok || !copyConfirm) return;
+            // Surface a sibling "Copied to clipboard" pill instead of
+            // mutating the button label -- swapping label text resizes
+            // the button, and the resulting jitter is more distracting
+            // than a brief side-text confirmation.
+            copyConfirm.hidden = false;
+            if (copyHideTimer) clearTimeout(copyHideTimer);
+            copyHideTimer = setTimeout(function () {
+                copyConfirm.hidden = true;
+                copyHideTimer = null;
+            }, COPY_CONFIRM_HIDE_MS);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(
+                function () { done(true); },
+                function () { done(fallbackCopy(text)); }
+            );
+        } else {
+            done(fallbackCopy(text));
+        }
+    });
+})();
+
+(function () {
+    // AJAX submit: the form posts to KeyValidator-Verify, which now returns
+    // a JSON result envelope. We intercept submit, render the result panel
+    // client-side, and avoid the full-page reload that came with the
+    // server-rendered ISML result block. CSRF token rides along inside the
+    // FormData since it's a hidden input on the form.
+
+    var form = document.querySelector('form.kv-form');
+    var mount = document.getElementById('kv-result-mount');
+    if (!form || !mount) return;
+
+    var MESSAGES = <isprint value="${pdict.resultMessagesJson}" encoding="off"/>;
+    var submitButton = form.querySelector('button[type=submit]');
+
+    function el(tag, className, text) {
+        var node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text != null) node.textContent = text;
+        return node;
+    }
+
+    function renderResult(result) {
+        var resultClass;
+        if (result.ok && result.match === true) resultClass = 'kv-result-ok';
+        else if (result.ok && result.match === false) resultClass = 'kv-result-mismatch';
+        else resultClass = 'kv-result-error';
+
+        mount.className = 'kv-card kv-result ' + resultClass;
+        mount.innerHTML = '';
+
+        var header = el('header', 'kv-card-header');
+        header.appendChild(el('h2', null, MESSAGES.heading));
+        mount.appendChild(header);
+
+        var body = el('div', 'kv-card-body');
+
+        var status, title, bodyText;
+        if (result.ok && result.match === true) {
+            status = el('p', 'kv-status kv-status-ok');
+            title = MESSAGES.matchTitle; bodyText = MESSAGES.matchBody;
+        } else if (result.ok && result.match === false) {
+            status = el('p', 'kv-status kv-status-mismatch');
+            title = MESSAGES.mismatchTitle; bodyText = MESSAGES.mismatchBody;
+        } else {
+            status = el('p', 'kv-status kv-status-error');
+            title = MESSAGES.errorTitle; bodyText = result.errorMessage || '';
+        }
+        status.appendChild(el('strong', null, title));
+        if (bodyText) status.appendChild(el('span', null, bodyText));
+        body.appendChild(status);
+
+        if (result.errorDetail) {
+            var details = el('details', 'kv-error-details');
+            // Open by default. The status copy says "See details below."
+            // -- collapsing them in that case is a UX paper-cut: the
+            // user is already mid-debug and the disclosure widget reads
+            // as a static label, not a clickable thing. Operators can
+            // still collapse if they want.
+            details.open = true;
+            details.appendChild(el('summary', null, MESSAGES.errorDetails));
+            details.appendChild(el('pre', 'kv-error-detail', result.errorDetail));
+            body.appendChild(details);
+        }
+
+        if (result.whitespaceNormalized) {
+            // Verification only succeeded after stripping spaces/tabs
+            // from the supplied key. Surface that as a warn-level notice
+            // even on a Match outcome -- the user likely needs to fix
+            // their canonical copy of the key (DKIM TXT record, deploy
+            // config, etc.) so production usage doesn't fail.
+            body.appendChild(el('p', 'kv-notice kv-notice-warn kv-advisory',
+                MESSAGES.whitespaceAdvisory));
+        }
+
+        var meta = el('dl', 'kv-meta');
+        meta.appendChild(el('dt', null, MESSAGES.metaAlgorithm));
+        meta.appendChild(el('dd', null, result.algorithm || ''));
+        body.appendChild(meta);
+
+        mount.appendChild(body);
+        mount.hidden = false;
+        mount.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function renderTransportError() {
+        renderResult({
+            ok: false,
+            match: null,
+            algorithm: '',
+            errorMessage: MESSAGES.networkError,
+            errorDetail: null
+        });
+    }
+
+    form.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        console.log('[KeyValidator] submit', {
+            alias: form.privKeyID && form.privKeyID.value,
+            algorithm: form.algorithm && form.algorithm.value,
+            publicKey: form.publicKey && form.publicKey.value
+        });
+
+        if (submitButton) submitButton.disabled = true;
+
+        // URL-encoded body to match the wire format the classic non-AJAX
+        // form post used. Avoids any subtle parser differences from
+        // multipart/form-data on the BM side.
+        fetch(form.action, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+            },
+            body: new URLSearchParams(new FormData(form)).toString()
+        })
+            .then(function (r) {
+                if (!r.ok) throw new Error('http ' + r.status);
+                return r.json();
+            })
+            .then(renderResult)
+            .catch(function (err) {
+                console.error('[KeyValidator] verify failed', err);
+                renderTransportError();
+            })
+            .then(function () {
+                if (submitButton) submitButton.disabled = false;
+            });
+    });
+
+    // Clear the form ourselves rather than rely on <button type="reset">:
+    // its 'reset' event fires *before* the browser clears the fields, so
+    // listeners that re-derive state from .value (like our strip/copy
+    // disabled-sync) would see stale values. Doing it manually keeps the
+    // ordering explicit.
+    var resetBtn = document.getElementById('kv-reset');
+    if (resetBtn) {
+        resetBtn.addEventListener('click', function () {
+            var aliasInput = document.getElementById('kv-privKeyID');
+            var pubInput = document.getElementById('kv-publicKey');
+            var algSelect = document.getElementById('kv-algorithm');
+            if (aliasInput) aliasInput.value = '';
+            if (pubInput) pubInput.value = '';
+            // Restore the algorithm select to whichever option was marked
+            // selected at render time (the controller's default).
+            if (algSelect) {
+                var defaultOption = algSelect.querySelector('option[selected]');
+                if (defaultOption) algSelect.value = defaultOption.value;
+            }
+            mount.hidden = true;
+            mount.innerHTML = '';
+            mount.className = 'kv-card kv-result';
+            document.dispatchEvent(new Event('kv:reset'));
+        });
+    }
+})();
+</script>
+
+</isdecorate>

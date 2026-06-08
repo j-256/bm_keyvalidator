@@ -1,0 +1,11 @@
+node_modules/
+.dwre/
+*.log
+.DS_Store
+
+# Local-only dev mirror script (uses paths specific to this machine).
+# Not to be confused with release.sh, which would be a real release tool.
+dev-sync.sh
+
+# Output of scripts/gen-test-keypair.sh -- throwaway crypto material.
+tmp/

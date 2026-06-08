@@ -1,0 +1,33 @@
+<isdecorate template="application/MenuFrame">
+<iscontent type="text/html" charset="UTF-8" compact="true">
+
+<!--
+    BM ships dw-ui-no-conflict.min.css and dw.ui.core.css on its modern
+    Angular-driven screens (Jobs, Private Keys, etc) but not on classic-
+    pipeline screens like ours. Without them BM's own shell widgets
+    (sidebar Site label, dropdowns, nav items) render at the browser's
+    default 1.5 line-height instead of BM's calibrated values, which
+    snowballs into visible spacing differences across the whole page.
+    Bundling them locally avoids depending on BM's internal static URLs.
+-->
+<link rel="stylesheet" type="text/css" href="${URLUtils.staticURL('/css/bm-shell/dw.ui.core.css')}"/>
+<link rel="stylesheet" type="text/css" href="${URLUtils.staticURL('/css/bm-shell/dw-ui-no-conflict.min.css')}"/>
+<link rel="stylesheet" type="text/css" href="${URLUtils.staticURL('/css/keyvalidator.css')}"/>
+
+<div class="kv-page">
+    <div class="kv-screen-header">
+        <div class="kv-breadcrumbs" role="navigation" aria-label="Breadcrumb"><span
+            class="kv-breadcrumb-entry"><a href="${URLUtils.url('ViewApplication-DisplayWelcomePage')}">Administration</a><span
+            class="kv-breadcrumb-divider"></span></span><span
+            class="kv-breadcrumb-entry"><a href="${URLUtils.url('SiteNavigationBar-ShowMenuitemOverview', 'CurrentMenuItemId', 'operations')}">Operations</a><span
+            class="kv-breadcrumb-divider"></span></span></div>
+
+        <h1 class="kv-page-title">${pdict.menuname}</h1>
+    </div>
+
+    <div class="kv-main">
+        <isreplace/>
+    </div>
+</div>
+
+</isdecorate>

@@ -1,0 +1,570 @@
+/*
+ * Key Validator BM extension styles.
+ *
+ * Calibrated against the live Business Manager UI as of BM 26.6, mostly
+ * Administration > Operations > Private Keys and Certificates (and a few
+ * cross-checks against Jobs and Manage Sites), so the page reads as a
+ * native BM module:
+ *
+ *   font          "Salesforce Sans", Arial, sans-serif
+ *   body          13px / #5c5c5c
+ *   accent        #0070d2 (links + primary button)
+ *   muted         #969492 (separators)
+ *   label         #2e2e2e / 600
+ *   header bg     #f2f2f2
+ *   page title    18px / 600 (renders 700 -- see @font-face note) / #5c5c5c
+ *   breadcrumb    13px on container, 12.0714px on link (= 13/14em)
+ *   primary btn   #0070d2 / white / 32px tall / radius 4px
+ *   input         32px tall / 1px solid #cccccc / radius 4px / padding 0 12px
+ *   card          white, no border, no shadow (BM wrapper supplies the bg)
+ *
+ * BM provides the sidebar, global header, and gradient background via the
+ * application/MenuFrame ISML decorator. Everything below is .kv-* scoped
+ * so we don't bleed into BM's own CSS.
+ */
+
+/*
+ * Note: BM ships SLDS + a "dwClassic" stylesheet with broad resets
+ * (h1{font-size:1em;font-weight:inherit}; .dwClassic a:link{color:#00629b};
+ * a body font of "PT Sans"). Several declarations below need !important to
+ * survive those resets. The cartridge is namespaced under .kv-* so the
+ * !important does not bleed into the rest of BM.
+ */
+
+/*
+ * Salesforce Sans webfont @font-face rules live in
+ *   cartridge/static/default/css/bm-shell/dw.ui.core.css
+ * (a copy of BM's own dw.ui.core.css with font URLs rewritten to point at
+ * our bundled cartridge/static/default/fonts/ directory). That file is
+ * <link>-loaded by layout.isml before this stylesheet so the font is
+ * available to both BM's shell and our cartridge content.
+ */
+
+/*
+ * Strip the visible border + drop shadow off BM's "classic" custom-module
+ * wrapper so the white card reads like the native module's content area.
+ * Padding/margin/radius are left intact so the gray page background still
+ * shows around the white card.
+ *
+ * The :has() qualifier ("only when this wrapper contains our .kv-page")
+ * keeps the override from affecting any other classic cartridge that
+ * happens to load this CSS via the same cartridge path.
+ */
+.customModule-card.dwClassic:has(> .kv-page) {
+    border: 0 !important;
+    box-shadow: none !important;
+}
+
+
+.kv-page {
+    box-sizing: border-box;
+    font-family: "Salesforce Sans", Arial, sans-serif !important;
+    font-size: 13px !important;
+    color: #5c5c5c;
+}
+
+.kv-page,
+.kv-page *,
+.kv-page *::before,
+.kv-page *::after {
+    box-sizing: border-box;
+    font-family: "Salesforce Sans", Arial, sans-serif;
+}
+
+/* ---------- Screen header (breadcrumb + title) ---------- */
+/*
+ * BM's wrapper has padding: 12px. Bleed back over it so the gray band
+ * spans edge-to-edge inside the white card, mirroring native modules.
+ *
+ * 9.28571px is the exact padding the native .bm-screen-header carries
+ * (= 13/14em from a 14px BM root). Matching it puts our breadcrumb +
+ * title at the same x/y as Private Keys and Jobs.
+ */
+.kv-screen-header {
+    margin: -12px -12px 0;
+    padding: 9.28571px;
+    background: #f2f2f2;
+}
+
+.kv-breadcrumbs {
+    margin: 0 0 5px !important;
+    font-size: 13px !important;
+    color: #5c5c5c !important;
+    line-height: 1.5;
+}
+
+.kv-breadcrumb-entry {
+    display: inline;
+}
+
+.kv-page .kv-breadcrumbs a,
+.kv-page .kv-breadcrumbs a:link,
+.kv-page .kv-breadcrumbs a:visited {
+    color: #0070d2 !important;
+    text-decoration: none !important;
+    /* Native BM scales the breadcrumb link to 13/14 em from a 13px parent,
+       resolving to 12.0714px. Hard-coding the resolved size matches exactly. */
+    font-size: 12.0714px !important;
+}
+
+.kv-page .kv-breadcrumbs a:hover,
+.kv-page .kv-breadcrumbs a:focus {
+    text-decoration: underline !important;
+}
+
+/*
+ * Slash separator -- mirrors native BM's .breadcrumbDivider exactly:
+ * an empty inline span placed at the end of each entry, with the slash
+ * supplied via ::before content and 6.5px margin on all sides. Putting
+ * the divider INSIDE each entry (rather than as its own sibling between
+ * entries) reproduces native's visual spacing because the entry's right
+ * margin contributes to the gap between adjacent entries.
+ */
+.kv-breadcrumb-divider {
+    display: inline;
+    margin: 6.5px;
+    color: #969492;
+    user-select: none;
+}
+
+.kv-breadcrumb-divider::before {
+    content: "/";
+    color: #969492;
+}
+
+/*
+ * Page title. Selector is qualified .kv-page .kv-page-title (not just
+ * .kv-page-title) to bump specificity past SLDS's `h1, h2, h3, h4, h5, h6
+ * { font-size: 1em; font-weight: inherit }` reset on its own.
+ *
+ * font-weight: 600 matches what native BM declares on .screenTitle, but
+ * BM only ships Salesforce Sans at 300/400/700 -- the browser substitutes
+ * 700 for 600. We declare 600 anyway so the spec stays faithful to native.
+ */
+.kv-page .kv-page-title {
+    display: block;
+    margin: 0 !important;
+    padding: 5px 0 !important;
+    font-family: "Salesforce Sans", Arial, sans-serif !important;
+    font-size: 18px !important;
+    font-weight: 600 !important;
+    line-height: 27px !important;
+    color: #5c5c5c !important;
+}
+
+/* ---------- Main content ---------- */
+
+.kv-main {
+    padding: 23px;
+}
+
+.kv-lede {
+    margin: 0 0 16px;
+    color: #5c5c5c;
+    font-size: 13px;
+    line-height: 1.5;
+    max-width: 720px;
+}
+
+/* ---------- Card ---------- */
+
+.kv-card {
+    background: #ffffff;
+    border-radius: 20px;
+    margin: 0 0 16px;
+    overflow: hidden;
+}
+
+.kv-card-header {
+    padding: 16px 0 12px;
+}
+
+.kv-card-header h2 {
+    margin: 0 !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    color: #2e2e2e !important;
+}
+
+.kv-card-help {
+    margin: 6px 0 0;
+    color: #5c5c5c;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.kv-card-body {
+    padding: 0 0 16px;
+}
+
+.kv-card-footer {
+    padding: 12px 0 16px;
+    color: #706e6b;
+    font-size: 13px;
+}
+
+.kv-form {
+    padding: 0 0 16px;
+}
+
+/* ---------- Form fields ---------- */
+
+.kv-field {
+    margin-bottom: 14px;
+}
+
+.kv-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.kv-field-half {
+    flex: 1 1 240px;
+    min-width: 0;
+}
+
+.kv-form label {
+    display: block;
+    margin: 0 0 4px;
+    padding: 4px 8px 0 0;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    color: #2e2e2e !important;
+}
+
+/*
+ * Inline notice shown next to the Private Key Alias input when the alias
+ * lookup either returned an empty list (info) or failed (warn). Sits
+ * between the input and the hint, so the user sees it as an annotation
+ * on this field rather than a global page banner.
+ */
+.kv-notice {
+    margin: 6px 0 0;
+    padding: 6px 10px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.kv-notice-info {
+    background: #eef4fb;
+    border-color: #c9def0;
+    color: #014486;
+}
+
+.kv-notice-warn {
+    background: #fdecdf;
+    border-color: #f5d6b8;
+    color: #b95000;
+}
+
+.kv-notice-success {
+    background: #e7f6ec;
+    border-color: #b6e0c2;
+    color: #2e844a;
+}
+
+/*
+ * Inline loading indicator shown while the alias lookup is in flight.
+ * Sits in the same slot as .kv-notice (between input and hint) so the
+ * vertical layout doesn't jump when the spinner is replaced by a notice
+ * or by populated autocomplete options.
+ */
+.kv-loading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 6px 0 0;
+    color: #969492;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+/*
+ * The HTML [hidden] attribute is the standard way to toggle visibility,
+ * but its `display: none` ships with selector specificity (0,1,0) which
+ * loses to any class-based rule that explicitly sets display (e.g. the
+ * `display: flex` on .kv-loading above). Force [hidden] to win across
+ * the cartridge so element.hidden = true reliably hides things.
+ */
+.kv-page [hidden] { display: none !important; }
+
+.kv-spinner {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 2px solid #d8dde6;
+    border-top-color: #0070d2;
+    border-radius: 50%;
+    animation: kv-spin 0.8s linear infinite;
+    flex: 0 0 auto;
+}
+
+@keyframes kv-spin {
+    to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    /* Slow the spin way down rather than disabling it -- the user still
+       needs a visible "in progress" signal during what may be a 20s wait,
+       but the rapid 0.8s spin is replaced with a gentle 4s rotation. */
+    .kv-spinner { animation-duration: 4s; }
+}
+
+/*
+ * Form fields. Values mirror BM's .dw-text input class as it appears on
+ * native modules (the alias-search field on Private Keys), not the
+ * .slds-input "Quick Find" search box -- those differ subtly (.dw-text
+ * has a lighter #cccccc border and 4px radius; .slds-input uses #5c5c5c
+ * and 8px). The data-entry style is what we want here.
+ */
+.kv-form input[type="text"],
+.kv-form select,
+.kv-form textarea {
+    width: 100%;
+    height: 32px;
+    padding: 0 12px;
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+    background: #ffffff;
+    font-family: inherit;
+    font-size: 13px;
+    color: #2e2e2e;
+    line-height: 1.4;
+    transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.kv-form textarea {
+    height: auto;
+    padding: 8px 12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    resize: vertical;
+    border-radius: 4px;
+}
+
+.kv-form input:focus,
+.kv-form select:focus,
+.kv-form textarea:focus {
+    outline: none;
+    border-color: #0070d2;
+    box-shadow: 0 0 0 3px rgba(0, 112, 210, 0.18);
+}
+
+.kv-form input::placeholder,
+.kv-form textarea::placeholder {
+    color: #bbb;
+}
+
+.kv-mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.kv-hint {
+    display: block;
+    margin-top: 4px;
+    color: #5c5c5c;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+/* ---------- Buttons ---------- */
+
+.kv-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: 4px;
+}
+
+.kv-btn {
+    display: inline-flex;
+    align-items: center;
+    height: 32px;
+    padding: 0 16px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 400;
+    line-height: 30px;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.kv-btn-primary {
+    background: #0070d2;
+    color: #ffffff;
+    border-color: #0070d2;
+}
+
+.kv-btn-primary:hover  { background: #005fb2; border-color: #005fb2; }
+.kv-btn-primary:active { background: #014486; }
+
+.kv-btn-secondary {
+    background: #ffffff;
+    color: #0070d2;
+    border-color: #d8dde6;
+}
+
+.kv-btn-secondary:hover { background: #f4f6f9; border-color: #969492; }
+
+.kv-btn[disabled],
+.kv-btn[disabled]:hover {
+    background: #f4f6f9;
+    color: #969492;
+    border-color: #d8dde6;
+    cursor: not-allowed;
+}
+
+.kv-form input[disabled],
+.kv-form textarea[disabled] {
+    background: #f4f6f9;
+    color: #969492;
+    cursor: not-allowed;
+}
+
+/*
+ * Compact variant for inline utility buttons (e.g. the "Strip to single
+ * line" / "Copy" pair under the Encoded Public Key textarea). Slightly
+ * shorter and tighter padding than the primary form actions so they
+ * read as helpers, not the form's main control.
+ */
+.kv-btn-small {
+    height: 26px;
+    padding: 0 10px;
+    font-size: 12px;
+}
+
+/*
+ * Row of inline utility buttons attached to a form field. Sits between
+ * the field's input and its hint, with a slightly tighter top margin
+ * than .kv-actions (which is for the form's main submit row).
+ */
+.kv-field-actions {
+    display: flex;
+    gap: 6px;
+    margin: 6px 0 0;
+    align-items: center;
+}
+
+/*
+ * Transient "Copied to clipboard" confirmation that appears next to the
+ * Copy button after a successful copy. Sibling to the buttons rather
+ * than swapped into the button's label so the button doesn't resize
+ * and visibly jitter when the confirmation flashes in and out.
+ */
+.kv-copy-confirm {
+    color: #2e844a;
+    font-size: 12px;
+    font-weight: 600;
+    padding-left: 4px;
+}
+
+/* ---------- Result panel ---------- */
+
+.kv-result {
+    border-left: 4px solid #5c5c5c;
+}
+
+.kv-result-ok       { border-left-color: #2e844a; }
+.kv-result-mismatch { border-left-color: #b95000; }
+.kv-result-error    { border-left-color: #ba0517; }
+
+.kv-status {
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    border-radius: 4px;
+    font-size: 13px;
+    line-height: 1.5;
+    border: 1px solid transparent;
+}
+
+.kv-status strong { display: block; margin-bottom: 2px; font-weight: 600; }
+
+.kv-status-ok       { background: #e7f6ec; color: #2e844a; border-color: #b6e0c2; }
+.kv-status-mismatch { background: #fdecdf; color: #b95000; border-color: #f5c6a3; }
+.kv-status-error    { background: #fde2e3; color: #ba0517; border-color: #f3b4b6; }
+
+.kv-error-details {
+    margin: 0 0 12px;
+}
+
+.kv-error-details > summary {
+    cursor: pointer;
+    color: #2e2e2e;
+    font-size: 12px;
+    padding: 4px 0;
+    user-select: none;
+}
+.kv-error-details > summary:hover {
+    color: #0070d2;
+}
+
+/*
+ * BM's bundled CSS resets `summary { display: block }` under .dwClassic,
+ * which strips the browser's native disclosure marker (the marker only
+ * renders when the summary uses display: list-item, which is the spec
+ * default). We also need to set list-style explicitly because the same
+ * shell CSS resets that to none. Both rules are scoped under .dwClassic
+ * so we win on specificity (0,2,1 vs the shell's 0,1,2). Same pattern
+ * as the dl dt reset elsewhere in this stylesheet.
+ */
+.dwClassic .kv-error-details > summary {
+    display: list-item;
+    list-style: disclosure-closed outside;
+    padding-left: 4px;
+}
+.dwClassic .kv-error-details[open] > summary {
+    list-style: disclosure-open outside;
+}
+
+.kv-error-detail {
+    margin: 6px 0 0;
+    padding: 10px 12px;
+    background: #181818;
+    color: #f4f4f7;
+    border-radius: 4px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    overflow-x: auto;
+}
+
+.kv-meta {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 6px 16px;
+    margin: 0;
+    padding: 10px 12px;
+    background: #fafaf9;
+    border: 1px solid #ececec;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+/*
+ * BM serves dw-ui-no-conflict_scoped.min.css with rules nested under
+ * `.dwClassic` -- effective selectors like `.dwClassic dl dt` (specificity
+ * 0,1,2) which sets float, 30%/70% widths, white-space:nowrap,
+ * text-overflow:ellipsis, padding-right at >=640px and clips "Algorithm"
+ * to "Al..." inside this grid. `.kv-meta dt` (0,1,1) loses to that, so
+ * scope our reset under `.dwClassic` to bump specificity to (0,2,1).
+ */
+.dwClassic .kv-meta dt,
+.dwClassic .kv-meta dd {
+    float: none;
+    width: auto;
+    max-width: none;
+    padding-right: 0;
+    overflow: visible;
+    white-space: normal;
+    text-overflow: clip;
+    margin: 0;
+}
+.kv-meta dt { font-weight: 700; color: #706e6b; text-transform: none; }
+.kv-meta dd { word-break: break-word; color: #2e2e2e; }

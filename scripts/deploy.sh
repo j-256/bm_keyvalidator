@@ -10,7 +10,10 @@
 # Sandbox vs PIG (stg / dev / prd):
 #   - Sandbox accepts plain Basic auth over HTTPS.
 #   - Staging is the ONLY tier that requires mTLS, and only via the
-#     cert.staging.<realm>.demandware.net hostname. Pass --p12.
+#     cert.staging.<realm>.demandware.net hostname. The p12 cert is an
+#     additional factor on top of your credentials (public docs call
+#     it the MFA/2FA cert), not a replacement -- pass --p12 alongside
+#     -u or -t.
 #   - Dev accepts plain auth, but uploads trigger a warning: some code
 #     caches are only refreshed by Code Replication from staging, so
 #     direct dev uploads can produce inconsistent runtime behavior.
@@ -30,9 +33,15 @@
 #         zzzz_001  ->  zzzz-001.dx.commercecloud.salesforce.com
 #         zzzz-001  ->  zzzz-001.dx.commercecloud.salesforce.com
 #       Both `_` and `-` are accepted as separators.
-#   PIG instances must be passed as a full hostname; tenant-id shortcuts
-#   for stg/dev/prd are not supported because the realm naming convention
-#   doesn't lend itself to a clean abbreviation.
+#   PIG instances must be passed as a full hostname; there's no tenant-id
+#   shortcut for stg/dev/prd. A realm carries two identifiers: a short
+#   realm id (e.g. zzzz) and a realm name (e.g. mybrand.na01). The sandbox
+#   shortcut works because a sandbox hostname is just the realm id plus an
+#   instance number (zzzz_001 -> zzzz-001.dx.commercecloud.salesforce.com).
+#   PIG hostnames are built from the realm name instead -- reverse-DNS
+#   ordered and hyphenated -- plus a tier word (mybrand.na01 ->
+#   staging-na01-mybrand). An xxxx_NNN shortcut carries neither the realm
+#   name nor the tier, so there's nothing to expand from.
 #
 # Usage:
 #     scripts/deploy.sh [-H host-or-sandbox-id] [-V code-version] [auth] [mtls]
@@ -63,7 +72,7 @@
 # Auth source order (flag overrides env, both override prompt):
 #     user:pass  -- -u/--user > SFCC_WEBDAV_USER+SFCC_WEBDAV_PASSWORD > prompt
 #     token      -- -t/--token > SFCC_WEBDAV_TOKEN
-#     p12 file   -- -p/--p12 > SFCC_WEBDAV_P12 > "$USER-$HOSTNAME.p12" in CWD
+#     p12 file   -- -p/--p12 > SFCC_WEBDAV_P12 > "$USER-<target-host>.p12" in CWD
 #     p12 pass   -- -P/--p12-pass > SFCC_WEBDAV_P12_PASSWORD > prompt
 #
 #     -u and -t are mutually exclusive. If neither is given and only env
@@ -268,7 +277,11 @@ else
     CURL_AUTH=(--user "$USER_PASS")
 fi
 
-# --- resolve mTLS (optional, but required for stg/dev) ---
+# --- resolve mTLS (staging only) ---
+# Staging is the only tier that requires -- and the only tier that
+# supports -- mTLS. The p12 client cert is an additional factor on top
+# of the username/password (or token), not a replacement: staging needs
+# both. Public docs refer to this p12 as the MFA/2FA client cert.
 [ -z "$P12_FILE" ] && P12_FILE="${SFCC_WEBDAV_P12:-}"
 if [ -z "$P12_FILE" ]; then
     DEFAULT_P12="$USER-$TARGET_HOST.p12"
@@ -303,10 +316,12 @@ case "$HOST_KIND" in
     stg)
         if [ -z "$P12_FILE" ]; then
             echo "deploy: $TARGET_HOST (staging) requires mTLS authentication" >&2
-            echo "  Pass --p12 <path> or set SFCC_WEBDAV_P12 to engage mTLS." >&2
-            echo "  Default p12 path is \$USER-\$HOSTNAME.p12 in the current directory." >&2
-            echo "  See Business Manager > Global Preferences > Keys & Certificates >" >&2
-            echo "  MFA Certificates for the CA bundle used to mint a client p12." >&2
+            echo "  The p12 cert is required in addition to your credentials, not" >&2
+            echo "  instead of them: pass --p12 (or set SFCC_WEBDAV_P12) alongside" >&2
+            echo "  -u/-t. Public docs call this the MFA/2FA client cert." >&2
+            echo "  Default p12 path is $USER-$TARGET_HOST.p12 in the current directory." >&2
+            echo "  The CA bundle used to mint a client p12 is shared once when your" >&2
+            echo "  realm is provisioned." >&2
             exit 1
         fi
         ;;

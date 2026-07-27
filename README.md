@@ -189,3 +189,9 @@ Compatibility-mode behavior is contractually frozen once a mode is published, so
 ## Why this is a BM extension and not a storefront controller
 
 The tool drives `dw.crypto.Signature.sign()` against private keys imported into Business Manager. Anything that can trigger sign operations against production keys belongs behind production-grade authentication, not on a public storefront route. A BM extension inherits the same login, role-permission, and audit-logging system as the rest of Business Manager.
+
+## License and attribution
+
+Apache-2.0 – see [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+Copyright is held by Salesforce, Inc., because the cartridge was developed using Salesforce resources. It is **not** an official Salesforce product: not published, supported, or endorsed by Salesforce, and offered with no warranty or support commitment. The bundled Salesforce Sans fonts and Business Manager stylesheets are Salesforce property, redistributed so the screens render consistently with the BM pages they extend.

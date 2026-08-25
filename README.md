@@ -178,6 +178,10 @@ The cartridge has been spot-checked end-to-end on compatibility modes **18.10** 
 
 Compatibility-mode behavior is contractually frozen once a mode is published, so there's no ongoing gate to re-run this matrix on every change. Worth re-checking only if the cartridge starts using a Script API that's known to differ across modes, or if SFCC publishes a new compatibility mode.
 
+## Releases
+
+Use `npm version` as the only release entrypoint. To publish the version already declared in `package.json`, run `npm version "$(node -p 'require("./package.json").version')" --allow-same-version`; later releases use `npm version <major|minor|patch>`. Both forms run the clean-main and remote-synchronization guard, repeat the release check, create the version commit and tag, and push both refs atomically. The tag-triggered GitHub Actions workflow verifies the exact tagged cartridge and creates the published GitHub Release; an explicit workflow dispatch can safely retry an existing tag.
+
 ## Troubleshooting
 
 - **The Key Validator menu item doesn't appear in Operations.** The cartridge may be on the instance but BM isn't loading it. Check, in order: the code version you uploaded to is the *active* one (*Administration > Site Development > Code Deployment*); the cartridge is on the **Business Manager** site's cartridge path (*Administration > Sites > Manage Sites > Business Manager > Settings*); your user has the *Key Validator* Write perm in *Roles & Permissions > Business Manager Modules* (admins skip this).

@@ -6,6 +6,9 @@
   "scripts": {
     "check:docs-cover": "node scripts/check-docs-cover.mjs",
     "test": "npm run check:docs-cover && npm run test:unit && npm run test:scripts",
+    "release:check": "npm test",
+    "preversion": "bash scripts/preversion.sh",
+    "postversion": "git push --atomic origin main v$npm_package_version",
     "test:unit": "node --test test/unit/*.test.js",
     "test:scripts": "bash test/scripts/deploy.test.sh"
   }

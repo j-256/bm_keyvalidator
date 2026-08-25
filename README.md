@@ -4,7 +4,7 @@ A standalone Business Manager extension cartridge that confirms a private key co
 
 The cartridge signs a fixed sample with the private key, then verifies that signature against the supplied public key. Successful verification means the keys are a pair.
 
-![Key Validator screen in Business Manager](docs/screenshot.png)
+![Key Validator screen in Business Manager](docs/screenshots/cover.png)
 
 ## Quick start
 
@@ -139,8 +139,8 @@ bm_keyvalidator/
 │   ├── mocks/                                  In-process dw.* fakes
 │   ├── unit/                                   node:test suites
 │   └── scripts/deploy.test.sh                  Shell tests for deploy.sh
-├── docs/
-│   └── screenshot.png                          README hero image
+├── docs/screenshots/
+│   └── cover.png                               README hero image
 ├── package.json                                npm test entry point
 ├── README.md
 └── DESIGN.md                                   Implementation notes

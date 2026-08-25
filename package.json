@@ -4,7 +4,8 @@
   "description": "Business Manager extension for verifying that an SFCC private key (KeyRef) and an encoded public key form a matching keypair.",
   "private": true,
   "scripts": {
-    "test": "npm run test:unit && npm run test:scripts",
+    "check:docs-cover": "node scripts/check-docs-cover.mjs",
+    "test": "npm run check:docs-cover && npm run test:unit && npm run test:scripts",
     "test:unit": "node --test test/unit/*.test.js",
     "test:scripts": "bash test/scripts/deploy.test.sh"
   }

@@ -159,6 +159,61 @@ test('fetchAliases: happy path returns mapped alias records', function () {
     ]);
 });
 
+test('fetchAliases: retrieves every certificate_search page', function () {
+    var deps = depsWith(
+        { status: 200, body: '{"access_token":"t"}' },
+        { status: 200, body: JSON.stringify({
+            hits: [
+                { alias: 'a1', type: 'private_key' },
+                { alias: 'a2', type: 'private_key' }
+            ],
+            count: 2, start: 0, total: 3
+        }) },
+        { status: 200, body: JSON.stringify({
+            hits: [{ alias: 'a3', type: 'private_key' }],
+            count: 1, start: 2, total: 3
+        }) }
+    );
+    var result = fetcher.fetchAliases('dwsid=abc', deps);
+    var firstSearch = JSON.parse(deps._rig.requests[1].body);
+    var secondSearch = JSON.parse(deps._rig.requests[2].body);
+
+    assert.deepEqual(result.aliases.map(function (entry) { return entry.alias; }), [
+        'a1', 'a2', 'a3'
+    ]);
+    assert.equal(firstSearch.start, 0);
+    assert.equal(firstSearch.count, 200);
+    assert.equal(secondSearch.start, 2);
+    assert.equal(secondSearch.count, 200);
+});
+
+test('fetchAliases: discards partial aliases when a later page fails', function () {
+    var deps = depsWith(
+        { status: 200, body: '{"access_token":"t"}' },
+        { status: 200, body: JSON.stringify({
+            hits: [{ alias: 'a1', type: 'private_key' }],
+            count: 1, start: 0, total: 2
+        }) },
+        { status: 503, body: '' }
+    );
+
+    assert.deepEqual(fetcher.fetchAliases('dwsid=abc', deps), {
+        ok: false,
+        error: 'unavailable',
+        aliases: null
+    });
+});
+
+test('fetchAliases: rejects an empty page before the reported total', function () {
+    var deps = depsWith(
+        { status: 200, body: '{"access_token":"t"}' },
+        { status: 200, body: '{"hits":[],"count":0,"start":0,"total":1}' }
+    );
+
+    assert.equal(fetcher.fetchAliases('dwsid=abc', deps).error, 'unknown');
+    assert.equal(deps._rig.requests.length, 2);
+});
+
 test('fetchAliases: empty hits array yields empty aliases (not error)', function () {
     var deps = depsWith(
         { status: 200, body: '{"access_token":"t"}' },

@@ -87,6 +87,7 @@
     var loading = document.getElementById('kv-aliases-loading');
     var aliasInput = document.getElementById('kv-privKeyID');
     var algorithmSelect = document.getElementById('kv-algorithm');
+    var ALIAS_REQUEST_TIMEOUT_MS = 60000;
     if (!datalist || !notice) return;
 
     // Map of alias -> { family, keySize }, derived from the
@@ -235,14 +236,10 @@
             if (loading) loading.hidden = true;
         }
 
-        // Client-side budget for the whole alias fetch. Comfortably exceeds
-        // 2 * TIMEOUT_MS in certificateFetcher.js (which serialises a token
-        // exchange and a certificate_search) so a single slow call doesn't
-        // get pre-empted by the abort.
         var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
         var abortTimer = setTimeout(function () {
             if (ctrl) ctrl.abort();
-        }, 20000);
+        }, ALIAS_REQUEST_TIMEOUT_MS);
 
         fetch(url, {
             credentials: 'same-origin',

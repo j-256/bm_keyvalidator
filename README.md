@@ -35,7 +35,7 @@ Every choice this cartridge makes is in service of an operator who's mid-task an
 
 ### Reactive alias dropdown
 
-On page load the cartridge fetches the imported private-key list from the OCAPI Data API and feeds it into a `<datalist>` attached to the alias input. You see your actual aliases without context-switching to the *Private Keys and Certificates* page. If the lookup fails for any reason the input remains a free-text field and a non-blocking notice explains why.
+On page load the cartridge fetches every page of the imported private-key list from the OCAPI Data API and feeds it into a `<datalist>` attached to the alias input. You see your actual aliases without context-switching to the *Private Keys and Certificates* page, even when the API needs multiple pages. If any page fails, the input remains a free-text field and a non-blocking notice explains why instead of presenting a partial list.
 
 ### Algorithm auto-pick
 

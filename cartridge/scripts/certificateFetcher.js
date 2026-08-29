@@ -33,12 +33,9 @@ var DEFAULT_AM_CLIENT_ID = '6c957560-464f-4a98-ad0f-5e9662527e27';
 var GRANT_TYPE = 'urn:demandware:params:oauth:grant-type:client-id:dwsid:dwsecuretoken';
 var TOKEN_PATH = '/dw/oauth2/access_token';
 var SEARCH_PATH = '/s/-/dw/data/v99_9/certificate_search';
-// Per-call timeout. Two calls happen in sequence (token exchange, then
-// certificate_search); the browser-side fetch in show.isml has a longer
-// abort budget than 2 * TIMEOUT_MS so a slow individual call doesn't get
-// pre-empted by the client.
+// Per-call timeout; the browser request has a larger whole-flow budget
 var TIMEOUT_MS = 8000;
-var MAX_RESULTS = 200;
+var SEARCH_PAGE_SIZE = 200;
 
 /**
  * Build a fresh deps bundle backed by the real dw.* modules. Called
@@ -133,11 +130,12 @@ function fetchAccessToken(cookieHeader, deps) {
 }
 
 /**
- * Step 2: certificate_search filtered to private keys.
+ * Fetch one certificate_search page filtered to private keys
  * @param {string} token -- bearer access token
- * @returns {{ ok: boolean, aliases: Array<{alias:string,...}>|null, error: string|null, status: number }}
+ * @param {number} start -- zero-based result offset
+ * @returns {{ ok: boolean, hits: Array<object>, total: number|undefined, error: string|null, status: number }}
  */
-function fetchPrivateKeyAliases(token, deps) {
+function fetchPrivateKeyPage(token, deps, start) {
     var url = getInstanceBaseUrl(deps) + SEARCH_PATH + '?display_locale=default';
     var http = new deps.HTTPClient();
     http.setTimeout(TIMEOUT_MS);
@@ -147,8 +145,8 @@ function fetchPrivateKeyAliases(token, deps) {
     http.setRequestHeader('Authorization', 'Bearer ' + token);
 
     var body = JSON.stringify({
-        start: 0,
-        count: MAX_RESULTS,
+        start: start,
+        count: SEARCH_PAGE_SIZE,
         sorts: [{ field: 'alias', sort_order: 'asc' }],
         // Filter at the API: type must be private_key. Trusted certs and
         // public-key-only entries are excluded server-side.
@@ -166,7 +164,7 @@ function fetchPrivateKeyAliases(token, deps) {
         http.send(body);
     } catch (e) {
         deps.log.warn('certificate_search threw: {0}', e && e.message ? e.message : e);
-        return { ok: false, aliases: null, error: 'timeout', status: 0 };
+        return { ok: false, hits: null, error: 'timeout', status: 0 };
     }
 
     var status = http.getStatusCode();
@@ -179,26 +177,58 @@ function fetchPrivateKeyAliases(token, deps) {
         if (status === 401 || status === 403) category = 'unauthorized';
         else if (status === 0 || status >= 500) category = 'unavailable';
         deps.log.warn('certificate_search failed status={0} fault="{1}"', status, ocapiError);
-        return { ok: false, aliases: null, error: category, status: status };
+        return { ok: false, hits: null, error: category, status: status };
     }
 
     var json = parseJson(responseBody);
     if (!json) {
-        return { ok: false, aliases: null, error: 'unknown', status: status };
+        return { ok: false, hits: null, error: 'unknown', status: status };
     }
 
-    var hits = Array.isArray(json.hits) ? json.hits : [];
-    var aliases = hits.map(function (hit) {
-        return {
-            alias: hit.alias,
-            algorithm: hit.algorithm || null,
-            keySize: hit.key_size || null,
-            validFrom: hit.valid_from || null,
-            validTo: hit.valid_to || null
-        };
-    });
+    return {
+        ok: true,
+        error: null,
+        hits: Array.isArray(json.hits) ? json.hits : [],
+        status: status,
+        total: json.total
+    };
+}
 
-    return { ok: true, aliases: aliases, error: null, status: status };
+function mapPrivateKey(hit) {
+    return {
+        alias: hit.alias,
+        algorithm: hit.algorithm || null,
+        keySize: hit.key_size || null,
+        validFrom: hit.valid_from || null,
+        validTo: hit.valid_to || null
+    };
+}
+
+function fetchPrivateKeyAliases(token, deps) {
+    var aliases = [];
+    var start = 0;
+
+    while (true) {
+        var page = fetchPrivateKeyPage(token, deps, start);
+        if (!page.ok) {
+            return { ok: false, aliases: null, error: page.error, status: page.status };
+        }
+
+        aliases = aliases.concat(page.hits.map(mapPrivateKey));
+        if (typeof page.total !== 'number' || !isFinite(page.total)
+            || page.total < 0 || Math.floor(page.total) !== page.total
+            || aliases.length >= page.total) {
+            break;
+        }
+        if (page.hits.length === 0) {
+            deps.log.warn('certificate_search stopped before total start={0} total={1}',
+                start, page.total);
+            return { ok: false, aliases: null, error: 'unknown', status: page.status };
+        }
+        start += page.hits.length;
+    }
+
+    return { ok: true, aliases: aliases, error: null, status: 200 };
 }
 
 /**

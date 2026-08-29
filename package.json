@@ -1,6 +1,6 @@
 {
   "name": "bm_keyvalidator",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Business Manager extension for verifying that an SFCC private key (KeyRef) and an encoded public key form a matching keypair.",
   "private": true,
   "scripts": {

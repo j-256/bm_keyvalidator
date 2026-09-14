@@ -194,6 +194,10 @@ Use `npm version` as the only release entrypoint. To publish the version already
 
 The tool drives `dw.crypto.Signature.sign()` against private keys imported into Business Manager. Anything that can trigger sign operations against production keys belongs behind production-grade authentication, not on a public storefront route. A BM extension inherits the same login, role-permission, and audit-logging system as the rest of Business Manager.
 
+## Project cover automation
+
+The cover renders the actual controller, resource bundle, ISML templates, and bundled CSS using synthetic platform bindings and alias metadata. It shows the cartridge content outside the Business Manager navigation shell. No instance, session cookie, or private key is used. Install the capture tooling with `npm ci --prefix tools/cover` and `npm exec --prefix tools/cover -- playwright install chromium`, then run `npm run capture:cover`. Use `-- --output FILE` to write a review image elsewhere. CI captures during source verification and retains the image as an artifact. Successful main builds publish a changed `docs/screenshots/cover.png` with an image-only commit; pull requests render without publishing, and superseded revisions skip publication.
+
 ## License and attribution
 
 Apache-2.0 – see [LICENSE](LICENSE) and [NOTICE](NOTICE).

@@ -203,3 +203,7 @@ The cover renders the actual controller, resource bundle, ISML templates, and bu
 Apache-2.0 – see [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
 Copyright is held by Salesforce, Inc., because the cartridge was developed using Salesforce resources. It is **not** an official Salesforce product: not published, supported, or endorsed by Salesforce, and offered with no warranty or support commitment. The bundled Salesforce Sans fonts and Business Manager stylesheets are Salesforce property, redistributed so the screens render consistently with the BM pages they extend.
+
+## Cover image density
+
+The project cover is rendered at 4x pixel density while preserving its logical viewport, so enlarged previews retain more detail. Higher density does not increase the displayed text size; use zoom to inspect small labels.
